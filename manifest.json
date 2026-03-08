@@ -1,0 +1,9 @@
+{
+  "name": "HAMS AI Studio",
+  "short_name": "HAMS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#001f3f",
+  "theme_color": "#87CEEB",
+  "icons": [{"src": "logo.png", "sizes": "512x512", "type": "image/png"}]
+}
