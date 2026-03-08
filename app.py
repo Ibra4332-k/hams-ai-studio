@@ -13,7 +13,8 @@ import os
 st.set_page_config(page_title="HAMS Universal AI Studio", layout="wide")
 
 # Your OpenAI Key
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+
 DB_FILE = "hams_master_archive.json"
 
 # PWA Header for Android/Windows Install
