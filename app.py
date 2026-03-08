@@ -10,14 +10,14 @@ import json
 import os
 import streamlit.components.v1 as components
 
-# --- 1. SETTINGS & PWA ---
+# --- 1. CONFIG & STYLES ---
 st.set_page_config(page_title="HAMS Universal AI Studio", layout="wide")
 
-# Using the GEMINI_API_KEY from your Streamlit Secrets
+# Correctly configuring the Free Gemini API
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-except:
-    st.error("Missing GEMINI_API_KEY in Secrets!")
+except Exception as e:
+    st.error(f"Secret Key Error: {e}")
 
 DB_FILE = "hams_master_archive.json"
 
@@ -26,12 +26,12 @@ st.markdown("""
     .stApp { background-color: #001f3f; color: #f0f2f6; }
     .stSidebar { background-color: #000b1a !important; border-right: 2px solid #87CEEB; }
     h1, h2, h3 { color: #87CEEB !important; }
-    .stButton>button { background-color: #87CEEB; color: #001f3f; font-weight: bold; border-radius: 12px; height: 3em; }
+    .stButton>button { background-color: #87CEEB; color: #001f3f; font-weight: bold; border-radius: 12px; height: 3em; width: 100%; }
     .brand-header { text-align: center; padding: 20px; background: linear-gradient(135deg, #001f3f, #002b5c); border-radius: 15px; border-bottom: 4px solid #87CEEB; margin-bottom: 25px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. VOICE RECOGNITION (JavaScript) ---
+# --- 2. VOICE RECOGNITION JS ---
 def st_speech_button(label, key):
     script = f"""
     <script>
@@ -51,42 +51,69 @@ def st_speech_button(label, key):
     """
     components.html(script, height=50)
 
-# --- 3. FREE AI LOGIC ---
+# --- 3. DATABASE LOGIC ---
+def load_db():
+    if not os.path.exists(DB_FILE):
+        with open(DB_FILE, "w") as f: json.dump([], f)
+    try:
+        with open(DB_FILE, "r") as f: return json.load(f)
+    except: return []
+
+def save_to_db(cat, typ, title, cont, meta=None):
+    db = load_db()
+    db.append({"date": time.strftime("%Y-%m-%d %H:%M"), "cat": cat, "typ": typ, "title": title, "cont": cont, "meta": meta or {}})
+    with open(DB_FILE, "w") as f: json.dump(db, f)
+
+# --- 4. THE FREE AI ENGINE ---
 def ask_hams_ai(prompt):
     try:
-        # Changed to 'gemini-pro' for maximum compatibility
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(f"HAMS School System: {prompt}")
+        # Use 'gemini-1.5-flash' but with a standard call to avoid the 404 version error
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(f"School Assistant Mode: {prompt}")
         return response.text
     except Exception as e:
-        st.error(f"AI Error: {e}"); return None
+        # Fallback to 'gemini-pro' if flash is unsupported in your region/version
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            return response.text
+        except:
+            st.error(f"AI Connection Error: {e}")
+            return None
 
-# --- 4. AUTH ---
+# --- 5. AUTH ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 if not st.session_state.auth:
     st.markdown('<div class="brand-header"><h1>HAMS AI Portal</h1></div>', unsafe_allow_html=True)
-    u, p = st.text_input("User"), st.text_input("Pass", type="password")
+    u, p = st.text_input("Username"), st.text_input("Password", type="password")
     if st.button("Login"):
-        if u == "admin" and p == "hams2026": st.session_state.auth = True; st.rerun()
+        if u == "admin" and p == "hams2026": 
+            st.session_state.auth = True
+            st.rerun()
     st.stop()
 
-# --- 5. SIDEBAR ---
+# --- 6. SIDEBAR ---
 with st.sidebar:
     st.markdown("### 💠 HAMS COMMAND")
-    mode = st.radio("Menu", ["🚀 Dashboard", "📊 PPT", "📄 PDF", "📈 Excel", "🎥 Media Lab", "📂 Archives"])
-    if st.button("Logout"): st.session_state.auth = False; st.rerun()
+    mode = st.radio("Menu", ["🚀 Dashboard", "📊 PPT Architect", "📄 PDF Gen", "📈 Excel Intelligence", "🎥 Media Lab", "📂 Archives"])
+    st.markdown("---")
+    if st.button("Logout"): 
+        st.session_state.auth = False
+        st.rerun()
 
-# --- 6. MODULES ---
+# --- 7. MODULES ---
 if mode == "🚀 Dashboard":
     st.markdown('<div class="brand-header"><h1>Global Search</h1></div>', unsafe_allow_html=True)
     st_speech_button("Speak your question", "main_q")
     q = st.text_input("Search or Prompt", key="main_q")
     if st.button("Generate Insight"):
         ans = ask_hams_ai(q)
-        if ans: st.info(ans)
+        if ans: 
+            st.info(ans)
+            save_to_db("Doc", "Search", q[:20], ans)
 
-elif mode == "📊 PPT":
-    st.header("PPT Architect")
+elif mode == "📊 PPT Architect":
+    st.header("PPT Creator")
     st_speech_button("Speak Topic", "ppt_t")
     t = st.text_input("Topic", key="ppt_t")
     if st.button("Build PPT"):
@@ -98,7 +125,9 @@ elif mode == "📊 PPT":
                 lines = s.strip().split('\n')
                 slide.shapes.title.text = lines[0]
                 slide.placeholders[1].text = "\n".join(lines[1:])
-            buf = BytesIO(); prs.save(buf); st.download_button("Download PPT", buf.getvalue(), f"{t}.pptx")
+            buf = BytesIO(); prs.save(buf)
+            save_to_db("Doc", "PPT", t, cont)
+            st.download_button("Download PPT", buf.getvalue(), f"{t}.pptx")
 
 elif mode == "🎥 Media Lab":
     st.header("Media Lab")
@@ -106,13 +135,22 @@ elif mode == "🎥 Media Lab":
     p = st.text_input("Prompt", key="media_p")
     i, v, m = st.tabs(["🖼️ Image", "🎬 Video", "🎵 Music"])
     with i:
-        if st.button("Gen Image"): st.image("https://via.placeholder.com/400x200?text=HAMS+Image+Request+Sent")
+        if st.button("Gen Image"):
+            save_to_db("Media", "Image", "Image", p)
+            st.image("https://via.placeholder.com/400x200?text=HAMS+Image+Request+Logged")
     with v:
-        if st.button("Gen Video"): st.info("Video processing request sent to HAMS server...")
+        if st.button("Gen Video"):
+            save_to_db("Media", "Video", "Video", p)
+            st.info("Video prompt archived for processing.")
     with m:
         vc = st.radio("Voice Style", ["Female", "Male", "Child"])
-        if st.button("Gen Music"): st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
+        if st.button("Gen Music"):
+            save_to_db("Media", "Music", "Music", p, {"voice": vc})
+            st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
 
 elif mode == "📂 Archives":
     st.header("History")
-    st.write("Session archives are being prepared...")
+    data = load_db()
+    for x in reversed(data):
+        with st.expander(f"{x['date']} | {x['typ']}: {x['title']}"):
+            st.write(x['cont'])
