@@ -2,5 +2,5 @@ streamlit
 pandas
 python-pptx
 reportlab
-openai
+google-generativeai
 openpyxl
